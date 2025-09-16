@@ -216,19 +216,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     try {
-      // Add a sample menu item for this category to make it appear in the database
+      // Create a sample menu item with the new category to make it appear in the database
+      // This creates a visible placeholder item that can be edited/replaced later
       await _databaseService.insertMenuItem(
         MenuItem(
-          name: 'Örnek Ürün ($categoryName)',
-          price: 0.0,
+          name: 'Yeni Ürün - $categoryName',
+          price: 10.0,
           category: categoryName,
-          active: false, // Make it inactive so it doesn't show in menu
+          active: true, // Make it active so the category shows up
+          sortOrder: 0,
         ),
       );
 
       _categoryController.clear();
       await _loadCategories();
-      _showSuccessSnackBar('Kategori başarıyla eklendi');
+      _showSuccessSnackBar('Kategori başarıyla eklendi. Menü ürünlerini bu kategoriye ekleyebilirsiniz.');
     } catch (e) {
       _showErrorSnackBar('Kategori eklenirken hata: $e');
     }
@@ -262,7 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed == true) {
       try {
-        // Delete all menu items in this category
+        // Delete all menu items in this category by setting them inactive
         final items = await _databaseService.getMenuItemsByCategory(category);
         for (final item in items) {
           await _databaseService.updateMenuItem(item.copyWith(active: false));

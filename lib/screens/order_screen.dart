@@ -25,6 +25,8 @@ class OrderScreen extends StatefulWidget {
 
 class _OrderScreenState extends State<OrderScreen> {
   final DatabaseService _databaseService = DatabaseService();
+  final TextEditingController _discountController = TextEditingController();
+  final TextEditingController _treatController = TextEditingController();
   
   List<String> categories = [];
   List<MenuItem> menuItems = [];
@@ -36,6 +38,11 @@ class _OrderScreenState extends State<OrderScreen> {
   
   bool isLoadingMenu = true;
   bool isLoadingOrder = false;
+
+  double discountPercentage = 0.0;
+  double treatAmount = 0.0;
+  String? discountReason;
+  String? treatReason;
 
   @override
   void initState() {
@@ -329,6 +336,8 @@ class _OrderScreenState extends State<OrderScreen> {
 
   Widget _buildOrderTotal() {
     double subtotal = orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
+    double discountAmount = (subtotal * discountPercentage) / 100;
+    double finalTotal = calculateFinalTotal();
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -338,20 +347,90 @@ class _OrderScreenState extends State<OrderScreen> {
       ),
       child: Column(
         children: [
+          // Subtotal
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
                 'Ara Toplam:',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: TextStyle(fontSize: 14),
               ),
               Text(
                 '${subtotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                style: const TextStyle(fontSize: 14),
               ),
             ],
           ),
+          
+          const SizedBox(height: 8),
+          
+          // Discount Section
+          _buildDiscountSection(subtotal),
+          
+          const SizedBox(height: 8),
+          
+          // Treat Section
+          _buildTreatSection(),
+          
+          const SizedBox(height: 8),
+          
+          // Show discount amount if applied
+          if (discountAmount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'İndirim (${discountPercentage.toStringAsFixed(0)}%):',
+                  style: const TextStyle(fontSize: 14, color: AppColors.discount),
+                ),
+                Text(
+                  '-${discountAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                  style: const TextStyle(fontSize: 14, color: AppColors.discount),
+                ),
+              ],
+            ),
+          
+          // Show treat amount if applied
+          if (treatAmount > 0)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'İkram:',
+                  style: TextStyle(fontSize: 14, color: AppColors.treat),
+                ),
+                Text(
+                  '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                  style: const TextStyle(fontSize: 14, color: AppColors.treat),
+                ),
+              ],
+            ),
+          
+          if (discountAmount > 0 || treatAmount > 0)
+            const Divider(height: 16),
+          
+          // Final Total
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Toplam:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                style: const TextStyle(
+                  fontSize: 16, 
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          
           const SizedBox(height: 16),
+          
+          // Payment Button
           Row(
             children: [
               Expanded(
@@ -371,6 +450,152 @@ class _OrderScreenState extends State<OrderScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildDiscountSection(double subtotal) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.discount.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.discount.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'İndirim (%)',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.discount,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _discountController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: '0',
+                    suffixText: '%',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  onChanged: (value) {
+                    double percentage = double.tryParse(value) ?? 0.0;
+                    if (percentage > 100) percentage = 100;
+                    if (percentage < 0) percentage = 0;
+                    setState(() {
+                      discountPercentage = percentage;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'İndirim sebebi (opsiyonel)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  onChanged: (value) {
+                    discountReason = value.isEmpty ? null : value;
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTreatSection() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.treat.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.treat.withOpacity(0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'İkram (₺)',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppColors.treat,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                flex: 2,
+                child: TextField(
+                  controller: _treatController,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(
+                    hintText: '0.00',
+                    suffixText: '₺',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  onChanged: (value) {
+                    double amount = double.tryParse(value) ?? 0.0;
+                    if (amount < 0) amount = 0;
+                    setState(() {
+                      treatAmount = amount;
+                    });
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                flex: 3,
+                child: TextField(
+                  decoration: InputDecoration(
+                    hintText: 'İkram sebebi (opsiyonel)',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    isDense: true,
+                  ),
+                  onChanged: (value) {
+                    treatReason = value.isEmpty ? null : value;
+                  },
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override  
+  void dispose() {
+    _discountController.dispose();
+    _treatController.dispose();
+    super.dispose();
   }
 
   Future<void> _addItemToOrder(MenuItem menuItem) async {
@@ -561,5 +786,11 @@ class _OrderScreenState extends State<OrderScreen> {
         backgroundColor: AppColors.primary,
       ),
     );
+  }
+
+  double calculateFinalTotal() {
+    double subtotal = orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
+    double discountAmount = (subtotal * discountPercentage) / 100;
+    return subtotal - discountAmount - treatAmount;
   }
 }
