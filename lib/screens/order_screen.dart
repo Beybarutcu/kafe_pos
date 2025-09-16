@@ -490,8 +490,8 @@ class _OrderScreenState extends State<OrderScreen> {
   Future<void> _checkAndUpdateTableStatus() async {
     if (orderItems.isEmpty && currentOrder != null) {
       try {
-        // Delete empty order
-        await _databaseService.deleteOrderItem(currentOrder!.id!);
+        // Delete empty order - FIX: Call deleteOrder instead of deleteOrderItem
+        await _databaseService.deleteOrder(currentOrder!.id!);
         
         // Update table status to empty
         await _databaseService.updateTableStatus(

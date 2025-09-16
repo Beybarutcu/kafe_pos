@@ -25,6 +25,7 @@ class _TableCardState extends State<TableCard> {
   final DatabaseService _databaseService = DatabaseService();
   List<OrderItem> orderItems = [];
   bool isLoadingOrder = false;
+  double totalPrice = 0.0;
 
   @override
   void initState() {
@@ -37,21 +38,33 @@ class _TableCardState extends State<TableCard> {
   @override
   void didUpdateWidget(TableCard oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // Reload order data when table status or order ID changes
-    if (widget.table.currentOrderId != oldWidget.table.currentOrderId ||
-        widget.table.status != oldWidget.table.status) {
-      if (widget.table.isOccupied && widget.table.currentOrderId != null) {
-        _loadCurrentOrder();
-      } else {
-        setState(() {
-          orderItems = [];
-        });
-      }
+    
+    // Always reload order data when table is occupied to ensure preview is current
+    if (widget.table.isOccupied && widget.table.currentOrderId != null) {
+      _loadCurrentOrder();
+    } else if (widget.table.isEmpty) {
+      // Clear order items if table becomes empty
+      setState(() {
+        orderItems = [];
+        totalPrice = 0.0;
+      });
+    }
+    
+    // Also handle the case where table status changes from occupied to empty
+    if (oldWidget.table.isOccupied && widget.table.isEmpty) {
+      setState(() {
+        orderItems = [];
+        totalPrice = 0.0;
+      });
     }
   }
 
   Future<void> _loadCurrentOrder() async {
     if (!widget.table.isOccupied || widget.table.currentOrderId == null) {
+      setState(() {
+        orderItems = [];
+        totalPrice = 0.0;
+      });
       return;
     }
 
@@ -61,12 +74,17 @@ class _TableCardState extends State<TableCard> {
 
     try {
       final items = await _databaseService.getOrderItems(widget.table.currentOrderId!);
+      final total = items.fold(0.0, (sum, item) => sum + item.totalPrice);
+      
       setState(() {
         orderItems = items.take(3).toList(); // Only show first 3 items
+        totalPrice = total;
         isLoadingOrder = false;
       });
     } catch (e) {
       setState(() {
+        orderItems = [];
+        totalPrice = 0.0;
         isLoadingOrder = false;
       });
     }
@@ -103,7 +121,7 @@ class _TableCardState extends State<TableCard> {
               Text(
                 widget.table.name,
                 style: const TextStyle(
-                  fontSize: 18, // Keep the bigger font size
+                  fontSize: 18,
                   fontWeight: FontWeight.bold,
                   color: AppColors.textPrimary,
                 ),
@@ -113,10 +131,26 @@ class _TableCardState extends State<TableCard> {
               
               const SizedBox(height: 8),
               
-              // Order preview (removed status icon)
+              // Order preview - takes most space
               Expanded(
                 child: _buildOrderPreview(),
               ),
+              
+              // Total price at bottom right (only show if table is occupied)
+              if (widget.table.isOccupied && !isLoadingOrder)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '${totalPrice.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primary,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
             ],
           ),
         ),
@@ -169,7 +203,7 @@ class _TableCardState extends State<TableCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Order items list (only show first 3, no "..." indicator)
+          // Order items list (only show first 3)
           ...orderItems.take(3).map((item) => Padding(
             padding: const EdgeInsets.only(bottom: 3),
             child: Row(

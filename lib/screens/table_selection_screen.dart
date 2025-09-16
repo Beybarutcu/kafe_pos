@@ -419,7 +419,7 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
               runSpacing: 16, // Fixed vertical spacing
               children: tables.map((table) => SizedBox(
                 width: cardWidth, // Fixed width for each card
-                height: 120, // Fixed height for each card
+                height: 140, // Fixed height for each card
                 child: TableCard(
                   table: table,
                   onTap: () => _handleTableTap(table),
