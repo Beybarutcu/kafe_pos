@@ -77,9 +77,26 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _loadOrCreateOrder() async {
-    try {
-      setState(() => isLoadingOrder = true);
+  try {
+    setState(() => isLoadingOrder = true);
+    
+    // Special handling for take away orders (table ID -1)
+    if (widget.table.id == -1) {
+      // For take away, always create a new order
+      final orderId = await _databaseService.insertOrder(Order(
+        tableId: -1, // Special table ID for take away
+        subtotal: 0.0,
+        finalTotal: 0.0,
+        status: AppConstants.orderStatusPending,
+        createdAt: DateTime.now(),
+      ));
       
+      currentOrder = await _databaseService.getOrderById(orderId);
+      orderItems = [];
+      
+      // Don't update table status for take away orders
+    } else {
+      // Normal table order handling
       Order? existingOrder = await _databaseService.getCurrentOrderForTable(widget.table.id!);
       
       if (existingOrder != null) {
@@ -102,7 +119,7 @@ class _OrderScreenState extends State<OrderScreen> {
           }
         }
       } else {
-        // Create new order
+        // Create new order for normal table
         final orderId = await _databaseService.insertOrder(Order(
           tableId: widget.table.id!,
           subtotal: 0.0,
@@ -120,14 +137,14 @@ class _OrderScreenState extends State<OrderScreen> {
           orderId: orderId,
         );
       }
-      
-      setState(() => isLoadingOrder = false);
-    } catch (e) {
-      setState(() => isLoadingOrder = false);
-      _showErrorSnackBar('Sipariş yüklenirken hata: $e');
     }
+    
+    setState(() => isLoadingOrder = false);
+  } catch (e) {
+    setState(() => isLoadingOrder = false);
+    _showErrorSnackBar('Sipariş yüklenirken hata: $e');
   }
-
+}
   void _filterItemsByCategory() {
     if (selectedCategory.isEmpty) {
       filteredItems = menuItems;
@@ -695,54 +712,57 @@ class _OrderScreenState extends State<OrderScreen> {
     );
   }
 
-  Future<void> _addItemToOrder(MenuItem menuItem) async {
-    try {
-      final existingIndex = orderItems.indexWhere((item) => item.menuItemName == menuItem.name);
+Future<void> _addItemToOrder(MenuItem menuItem) async {
+  try {
+    final existingIndex = orderItems.indexWhere((item) => item.menuItemName == menuItem.name);
+    
+    if (existingIndex != -1) {
+      final existingItem = orderItems[existingIndex];
+      final newQuantity = existingItem.quantity + 1;
+      final newTotalPrice = menuItem.price * newQuantity;
       
-      if (existingIndex != -1) {
-        final existingItem = orderItems[existingIndex];
-        final newQuantity = existingItem.quantity + 1;
-        final newTotalPrice = menuItem.price * newQuantity;
-        
-        final updatedItem = existingItem.copyWith(
-          quantity: newQuantity,
-          totalPrice: newTotalPrice,
-        );
-        
-        await _databaseService.updateOrderItem(updatedItem);
-        
-        setState(() {
-          orderItems[existingIndex] = updatedItem;
-        });
-      } else {
-        final orderItem = OrderItem(
-          orderId: currentOrder!.id!,
-          menuItemName: menuItem.name,
-          quantity: 1,
-          unitPrice: menuItem.price,
-          totalPrice: menuItem.price,
-        );
-        
-        final itemId = await _databaseService.insertOrderItem(orderItem);
-        final newItem = orderItem.copyWith(id: itemId);
-        
-        setState(() {
-          orderItems.add(newItem);
-        });
-      }
+      final updatedItem = existingItem.copyWith(
+        quantity: newQuantity,
+        totalPrice: newTotalPrice,
+      );
       
-      await _updateOrderTotal();
+      await _databaseService.updateOrderItem(updatedItem);
       
+      setState(() {
+        orderItems[existingIndex] = updatedItem;
+      });
+    } else {
+      final orderItem = OrderItem(
+        orderId: currentOrder!.id!,
+        menuItemName: menuItem.name,
+        quantity: 1,
+        unitPrice: menuItem.price,
+        totalPrice: menuItem.price,
+      );
+      
+      final itemId = await _databaseService.insertOrderItem(orderItem);
+      final newItem = orderItem.copyWith(id: itemId);
+      
+      setState(() {
+        orderItems.add(newItem);
+      });
+    }
+    
+    await _updateOrderTotal();
+    
+    // Only update table status for normal tables, not take away
+    if (widget.table.id != -1) {
       await _databaseService.updateTableStatus(
         widget.table.id!,
         AppConstants.tableStatusOccupied,
         orderId: currentOrder!.id!,
       );
-      
-    } catch (e) {
-      _showErrorSnackBar('Ürün eklenirken hata: $e');
     }
+    
+  } catch (e) {
+    _showErrorSnackBar('Ürün eklenirken hata: $e');
   }
+}
 
   Future<void> _updateItemQuantity(OrderItem item, int newQuantity) async {
     if (newQuantity <= 0) {
@@ -838,28 +858,31 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _checkAndUpdateTableStatus() async {
-    if (orderItems.isEmpty && currentOrder != null) {
-      try {
-        await _databaseService.deleteOrder(currentOrder!.id!);
-        
-        await _databaseService.updateTableStatus(
-          widget.table.id!,
-          AppConstants.tableStatusEmpty,
-        );
-        
-        setState(() {
-          currentOrder = null;
-        });
-      } catch (e) {
-        print('Error updating table status: $e');
-      }
+  if (orderItems.isEmpty && currentOrder != null && widget.table.id != -1) {
+    try {
+      await _databaseService.deleteOrder(currentOrder!.id!);
+      
+      await _databaseService.updateTableStatus(
+        widget.table.id!,
+        AppConstants.tableStatusEmpty,
+      );
+      
+      setState(() {
+        currentOrder = null;
+      });
+    } catch (e) {
+      print('Error updating table status: $e');
     }
   }
+}
 
   Future<void> _handleBackPress() async {
+  // Only check and update table status for normal tables
+  if (widget.table.id != -1) {
     await _checkAndUpdateTableStatus();
-    Navigator.of(context).pop();
   }
+  Navigator.of(context).pop();
+}
 
   Future<void> _updateOrderTotal() async {
     if (currentOrder == null) return;

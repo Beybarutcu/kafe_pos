@@ -276,48 +276,6 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       );
     }
 
-    if (tables.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(
-                Icons.table_restaurant,
-                size: 64,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Masa Bulunamadı',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
-                'Henüz masa tanımlanmamış.\nAyarlardan masa ekleyebilirsiniz.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: _showSettings,
-                icon: const Icon(Icons.settings),
-                label: const Text('Ayarlara Git'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -327,11 +285,53 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
           _buildHeaderStats(),
           const SizedBox(height: 16),
           
+          // Take Away Button - Full width with same height as table cards
+          _buildTakeAwayButton(),
+          const SizedBox(height: 16),
+          
           // Tables grid
           Expanded(
-            child: _buildTablesGrid(),
+            child: tables.isEmpty ? _buildEmptyTablesView() : _buildTablesGrid(),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTakeAwayButton() {
+    return Container(
+      width: double.infinity, // Full width
+      height: 140, // Same height as table cards
+      child: InkWell(
+        onTap: _handleTakeAwayTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.cardBackground,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.primary,
+              width: 2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withOpacity(0.15),
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: const Center(
+            child: Text(
+              'Take Away',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -394,6 +394,48 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
     );
   }
 
+  Widget _buildEmptyTablesView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.table_restaurant,
+              size: 64,
+              color: AppColors.textSecondary,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Masa Bulunamadı',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Henüz masa tanımlanmamış.\nAyarlardan masa ekleyebilirsiniz.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _showSettings,
+              icon: const Icon(Icons.settings),
+              label: const Text('Ayarlara Git'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildTablesGrid() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -437,6 +479,22 @@ class _TableSelectionScreenState extends State<TableSelectionScreen> {
       _startNewOrder(table);
     } else {
       _continueOrder(table);
+    }
+  }
+
+  void _handleTakeAwayTap() async {
+    try {
+      // Create a special "table" for take away orders with a proper ID
+      final takeAwayTable = CafeTable(
+        id: -1, // Special ID for take away orders
+        tableNumber: 0, // Special number for take away
+        name: 'Take Away',
+        status: AppConstants.tableStatusEmpty,
+      );
+      
+      _navigateToOrderScreen(takeAwayTable);
+    } catch (e) {
+      _showErrorSnackBar('Take away siparişi başlatılırken hata: $e');
     }
   }
 
