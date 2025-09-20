@@ -9,7 +9,8 @@ import '../utils/colors.dart';
 import '../utils/turkish_strings.dart';
 import '../utils/constants.dart';
 import '../widgets/menu_item_card.dart';
-import '../widgets/order_summary_card.dart';
+import '../widgets/discount_dialog.dart';
+import '../widgets/treat_dialog.dart';
 
 class OrderScreen extends StatefulWidget {
   final CafeTable table;
@@ -25,8 +26,6 @@ class OrderScreen extends StatefulWidget {
 
 class _OrderScreenState extends State<OrderScreen> {
   final DatabaseService _databaseService = DatabaseService();
-  final TextEditingController _discountController = TextEditingController();
-  final TextEditingController _treatController = TextEditingController();
   
   List<String> categories = [];
   List<MenuItem> menuItems = [];
@@ -38,11 +37,11 @@ class _OrderScreenState extends State<OrderScreen> {
   
   bool isLoadingMenu = true;
   bool isLoadingOrder = false;
-
+  
+  // Discount and treat state
   double discountPercentage = 0.0;
-  double treatAmount = 0.0;
   String? discountReason;
-  String? treatReason;
+  Map<int, int> treatCounts = {}; // itemId -> how many pieces are treats
 
   @override
   void initState() {
@@ -62,13 +61,12 @@ class _OrderScreenState extends State<OrderScreen> {
       final loadedCategories = await _databaseService.getMenuCategories();
       final loadedItems = await _databaseService.getAllMenuItems();
       
-      // Add "Favoriler" as the first category
       List<String> categoriesWithFavorites = ['Favoriler', ...loadedCategories];
       
       setState(() {
         categories = categoriesWithFavorites;
         menuItems = loadedItems;
-        selectedCategory = 'Favoriler'; // Start with favorites
+        selectedCategory = 'Favoriler';
         _filterItemsByCategory();
         isLoadingMenu = false;
       });
@@ -82,13 +80,27 @@ class _OrderScreenState extends State<OrderScreen> {
     try {
       setState(() => isLoadingOrder = true);
       
-      // Try to get existing order for this table
       Order? existingOrder = await _databaseService.getCurrentOrderForTable(widget.table.id!);
       
       if (existingOrder != null) {
-        // Load existing order
         currentOrder = existingOrder;
         orderItems = await _databaseService.getOrderItems(existingOrder.id!);
+        
+        // Load existing discounts
+        if (existingOrder.subtotal > 0) {
+          discountPercentage = existingOrder.discountAmount > 0 
+              ? (existingOrder.discountAmount / existingOrder.subtotal) * 100 
+              : 0.0;
+        }
+        discountReason = existingOrder.discountReason;
+        
+        // Load treat counts from database
+        treatCounts.clear();
+        for (final item in orderItems) {
+          if (item.isTreat) {
+            treatCounts[item.id!] = (treatCounts[item.id!] ?? 0) + 1;
+          }
+        }
       } else {
         // Create new order
         final orderId = await _databaseService.insertOrder(Order(
@@ -102,7 +114,6 @@ class _OrderScreenState extends State<OrderScreen> {
         currentOrder = await _databaseService.getOrderById(orderId);
         orderItems = [];
         
-        // Update table status
         await _databaseService.updateTableStatus(
           widget.table.id!,
           AppConstants.tableStatusOccupied,
@@ -121,11 +132,41 @@ class _OrderScreenState extends State<OrderScreen> {
     if (selectedCategory.isEmpty) {
       filteredItems = menuItems;
     } else if (selectedCategory == 'Favoriler') {
-      // For now, show first 6 items as favorites (you can implement a favorites system later)
       filteredItems = menuItems.take(6).toList();
     } else {
       filteredItems = menuItems.where((item) => item.category == selectedCategory).toList();
     }
+  }
+
+  double calculateSubtotal() {
+    return orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
+  }
+
+  double calculateDiscountAmount() {
+    double subtotal = calculateSubtotal();
+    return (subtotal * discountPercentage) / 100;
+  }
+
+  double calculateTreatAmount() {
+    double total = 0.0;
+    for (final item in orderItems) {
+      int treatCount = treatCounts[item.id!] ?? 0;
+      if (treatCount > 0) {
+        total += (item.unitPrice * treatCount);
+      }
+    }
+    return total;
+  }
+
+  int getTreatCountForItem(int itemId) {
+    return treatCounts[itemId] ?? 0;
+  }
+
+  double calculateFinalTotal() {
+    double subtotal = calculateSubtotal();
+    double discountAmount = calculateDiscountAmount();
+    double treatAmount = calculateTreatAmount();
+    return subtotal - discountAmount - treatAmount;
   }
 
   @override
@@ -153,15 +194,12 @@ class _OrderScreenState extends State<OrderScreen> {
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
           : Row(
               children: [
-                // Left side - Menu categories and items
                 Expanded(
                   flex: 2,
                   child: _buildMenuSection(),
                 ),
-                
-                // Right side - Order summary
                 SizedBox(
-                  width: 300,
+                  width: 350, // Increased width for tablet
                   child: _buildOrderSummary(),
                 ),
               ],
@@ -174,10 +212,7 @@ class _OrderScreenState extends State<OrderScreen> {
       color: AppColors.cardBackground,
       child: Column(
         children: [
-          // Categories
           _buildCategoryTabs(),
-          
-          // Menu items
           Expanded(
             child: _buildMenuItemsGrid(),
           ),
@@ -188,10 +223,10 @@ class _OrderScreenState extends State<OrderScreen> {
 
   Widget _buildCategoryTabs() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20), // Increased padding for tablet
       child: Wrap(
-        spacing: 12, // Space between buttons horizontally
-        runSpacing: 12, // Space between lines vertically
+        spacing: 16, // Increased spacing for tablet
+        runSpacing: 16,
         children: categories.map((category) {
           final isSelected = category == selectedCategory;
           final isFavorites = category == 'Favoriler';
@@ -205,9 +240,9 @@ class _OrderScreenState extends State<OrderScreen> {
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              width: 120, // Fixed width for all buttons
-              height: 64, // Fixed height
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              width: 140, // Increased width for tablet
+              height: 80, // Increased height for tablet
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               decoration: BoxDecoration(
                 color: isSelected 
                     ? (isFavorites ? AppColors.treat : AppColors.primary)
@@ -232,11 +267,11 @@ class _OrderScreenState extends State<OrderScreen> {
                   category,
                   style: TextStyle(
                     color: isSelected ? Colors.white : AppColors.textPrimary,
-                    fontSize: 14, // Slightly smaller to fit better
+                    fontSize: 16, // Increased font size for tablet
                     fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
-                  maxLines: 2, // Allow 2 lines for long text
+                  maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -258,12 +293,12 @@ class _OrderScreenState extends State<OrderScreen> {
     }
 
     return GridView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20), // Increased padding for tablet
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        crossAxisSpacing: 12,
-        mainAxisSpacing: 12,
-        childAspectRatio: 1.2,
+        crossAxisCount: 4, // Increased from 3 to 4 for tablet
+        crossAxisSpacing: 16, // Increased spacing
+        mainAxisSpacing: 16,
+        childAspectRatio: 1.1, // Slightly adjusted ratio
       ),
       itemCount: filteredItems.length,
       itemBuilder: (context, index) {
@@ -280,19 +315,18 @@ class _OrderScreenState extends State<OrderScreen> {
       color: AppColors.background,
       child: Column(
         children: [
-          // Order header
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20), // Increased padding for tablet
             color: AppColors.primary,
             child: Row(
               children: [
-                const Icon(Icons.receipt_long, color: Colors.white),
-                const SizedBox(width: 8),
+                const Icon(Icons.receipt_long, color: Colors.white, size: 24), // Increased icon size
+                const SizedBox(width: 12),
                 Text(
                   'Sipariş Özeti',
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
+                    fontSize: 20, // Increased font size for tablet
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -300,7 +334,6 @@ class _OrderScreenState extends State<OrderScreen> {
             ),
           ),
           
-          // Order items
           Expanded(
             child: orderItems.isEmpty
                 ? const Center(
@@ -316,28 +349,162 @@ class _OrderScreenState extends State<OrderScreen> {
                     padding: const EdgeInsets.all(8),
                     itemCount: orderItems.length,
                     itemBuilder: (context, index) {
-                      return OrderSummaryCard(
-                        orderItem: orderItems[index],
-                        onQuantityChanged: (newQuantity) {
-                          _updateItemQuantity(orderItems[index], newQuantity);
-                        },
-                        onRemove: () => _removeItemFromOrder(orderItems[index]),
+                      final item = orderItems[index];
+                      final treatCount = getTreatCountForItem(item.id!);
+                      
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(16), // Increased padding
+                        decoration: BoxDecoration(
+                          color: treatCount > 0 
+                              ? AppColors.treat.withOpacity(0.1)
+                              : AppColors.cardBackground,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: treatCount > 0 
+                                ? AppColors.treat 
+                                : AppColors.background, 
+                            width: treatCount > 0 ? 2 : 1,
+                          ),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    item.menuItemName,
+                                    style: TextStyle(
+                                      fontSize: 16, // Increased font size for tablet
+                                      fontWeight: FontWeight.bold,
+                                      color: treatCount > 0 ? AppColors.treat : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                                if (treatCount > 0)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.treat,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      '${treatCount} İKRAM',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11, // Slightly increased
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                IconButton(
+                                  onPressed: () => _removeItemFromOrder(item),
+                                  icon: const Icon(Icons.close),
+                                  color: AppColors.occupiedTable,
+                                  iconSize: 20, // Increased for tablet
+                                  constraints: const BoxConstraints(minWidth: 40, minHeight: 40), // Bigger touch target
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    _buildQuantityButton(
+                                      icon: Icons.remove,
+                                      onTap: () => _updateItemQuantity(item, item.quantity - 1),
+                                    ),
+                                    Container(
+                                      margin: const EdgeInsets.symmetric(horizontal: 16), // Increased margin
+                                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), // Increased padding
+                                      decoration: BoxDecoration(
+                                        color: AppColors.background,
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        item.quantity.toString(),
+                                        style: const TextStyle(
+                                          fontSize: 16, // Increased font size
+                                          fontWeight: FontWeight.bold,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    _buildQuantityButton(
+                                      icon: Icons.add,
+                                      onTap: () => _updateItemQuantity(item, item.quantity + 1),
+                                    ),
+                                  ],
+                                ),
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      item.formattedTotalPrice,
+                                      style: const TextStyle(
+                                        fontSize: 16, // Increased font size
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    if (treatCount > 0)
+                                      Text(
+                                        '-${(item.unitPrice * treatCount).toStringAsFixed(2)} ₺',
+                                        style: const TextStyle(
+                                          fontSize: 14, // Increased font size
+                                          color: AppColors.treat,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       );
                     },
                   ),
           ),
           
-          // Order total and actions
           if (orderItems.isNotEmpty) _buildOrderTotal(),
         ],
       ),
     );
   }
 
+  Widget _buildQuantityButton({
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.all(8), // Increased padding for tablet
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Icon(
+          icon,
+          color: Colors.white,
+          size: 20, // Increased icon size for tablet
+        ),
+      ),
+    );
+  }
+
   Widget _buildOrderTotal() {
-    double subtotal = orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
-    double discountAmount = (subtotal * discountPercentage) / 100;
+    double subtotal = calculateSubtotal();
+    double discountAmount = calculateDiscountAmount();
+    double treatAmount = calculateTreatAmount();
     double finalTotal = calculateFinalTotal();
+    int totalTreatItems = treatCounts.values.fold(0, (sum, count) => sum + count);
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -362,25 +529,62 @@ class _OrderScreenState extends State<OrderScreen> {
             ],
           ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           
-          // Discount Section
-          _buildDiscountSection(subtotal),
+          // Discount and Treat Buttons
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _showDiscountDialog,
+                  icon: const Icon(Icons.percent, size: 16),
+                  label: Text(discountPercentage > 0 
+                      ? '%${discountPercentage.toStringAsFixed(0)}'
+                      : 'İndirim'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: discountPercentage > 0 
+                        ? AppColors.discount 
+                        : AppColors.discount.withOpacity(0.7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: orderItems.isNotEmpty ? _showTreatDialog : null,
+                  icon: const Icon(Icons.favorite, size: 16),
+                  label: Text(totalTreatItems > 0 
+                      ? '${totalTreatItems} İkram'
+                      : 'İkram'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: totalTreatItems > 0 
+                        ? AppColors.treat 
+                        : AppColors.treat.withOpacity(0.7),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
           
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
           
-          // Treat Section
-          _buildTreatSection(),
-          
-          const SizedBox(height: 8),
-          
-          // Show discount amount if applied
+          // Show applied discounts/treats
           if (discountAmount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'İndirim (${discountPercentage.toStringAsFixed(0)}%):',
+                  'İndirim (%${discountPercentage.toStringAsFixed(0)}):',
                   style: const TextStyle(fontSize: 14, color: AppColors.discount),
                 ),
                 Text(
@@ -390,14 +594,13 @@ class _OrderScreenState extends State<OrderScreen> {
               ],
             ),
           
-          // Show treat amount if applied
           if (treatAmount > 0)
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'İkram:',
-                  style: TextStyle(fontSize: 14, color: AppColors.treat),
+                Text(
+                  'İkram ($totalTreatItems adet):',
+                  style: const TextStyle(fontSize: 14, color: AppColors.treat),
                 ),
                 Text(
                   '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
@@ -442,6 +645,9 @@ class _OrderScreenState extends State<OrderScreen> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),
@@ -452,159 +658,48 @@ class _OrderScreenState extends State<OrderScreen> {
     );
   }
 
-  Widget _buildDiscountSection(double subtotal) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.discount.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.discount.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'İndirim (%)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.discount,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _discountController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: '0',
-                    suffixText: '%',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    isDense: true,
-                  ),
-                  onChanged: (value) {
-                    double percentage = double.tryParse(value) ?? 0.0;
-                    if (percentage > 100) percentage = 100;
-                    if (percentage < 0) percentage = 0;
-                    setState(() {
-                      discountPercentage = percentage;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'İndirim sebebi (opsiyonel)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    isDense: true,
-                  ),
-                  onChanged: (value) {
-                    discountReason = value.isEmpty ? null : value;
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+  void _showDiscountDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return DiscountDialog(
+          currentDiscount: discountPercentage,
+          currentReason: discountReason,
+          onApply: (percentage, reason) {
+            setState(() {
+              discountPercentage = percentage;
+              discountReason = reason;
+            });
+            _updateOrderTotal();
+          },
+        );
+      },
     );
   }
 
-  Widget _buildTreatSection() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppColors.treat.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.treat.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'İkram (₺)',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.treat,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                flex: 2,
-                child: TextField(
-                  controller: _treatController,
-                  keyboardType: TextInputType.number,
-                  decoration: InputDecoration(
-                    hintText: '0.00',
-                    suffixText: '₺',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    isDense: true,
-                  ),
-                  onChanged: (value) {
-                    double amount = double.tryParse(value) ?? 0.0;
-                    if (amount < 0) amount = 0;
-                    setState(() {
-                      treatAmount = amount;
-                    });
-                  },
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                flex: 3,
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'İkram sebebi (opsiyonel)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                    isDense: true,
-                  ),
-                  onChanged: (value) {
-                    treatReason = value.isEmpty ? null : value;
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
+  void _showTreatDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return TreatDialog(
+          orderItems: orderItems,
+          currentTreatCounts: treatCounts,
+          onApply: (newTreatCounts) {
+            setState(() {
+              treatCounts = newTreatCounts;
+            });
+            _updateTreatItems();
+          },
+        );
+      },
     );
-  }
-
-  @override  
-  void dispose() {
-    _discountController.dispose();
-    _treatController.dispose();
-    super.dispose();
   }
 
   Future<void> _addItemToOrder(MenuItem menuItem) async {
     try {
-      // Check if item already exists in order
       final existingIndex = orderItems.indexWhere((item) => item.menuItemName == menuItem.name);
       
       if (existingIndex != -1) {
-        // Update quantity of existing item
         final existingItem = orderItems[existingIndex];
         final newQuantity = existingItem.quantity + 1;
         final newTotalPrice = menuItem.price * newQuantity;
@@ -620,7 +715,6 @@ class _OrderScreenState extends State<OrderScreen> {
           orderItems[existingIndex] = updatedItem;
         });
       } else {
-        // Add new item to order
         final orderItem = OrderItem(
           orderId: currentOrder!.id!,
           menuItemName: menuItem.name,
@@ -639,7 +733,6 @@ class _OrderScreenState extends State<OrderScreen> {
       
       await _updateOrderTotal();
       
-      // Update table status to occupied and set current order ID
       await _databaseService.updateTableStatus(
         widget.table.id!,
         AppConstants.tableStatusOccupied,
@@ -668,12 +761,20 @@ class _OrderScreenState extends State<OrderScreen> {
       
       final index = orderItems.indexWhere((i) => i.id == item.id);
       if (index != -1) {
+        // If quantity decreased, adjust treats accordingly
+        final currentTreatCount = getTreatCountForItem(item.id!);
+        if (currentTreatCount > newQuantity) {
+          setState(() {
+            treatCounts[item.id!] = newQuantity;
+          });
+        }
+        
         setState(() {
           orderItems[index] = updatedItem;
         });
+        
         await _updateOrderTotal();
         
-        // Force update table status to trigger table card refresh
         await _databaseService.updateTableStatus(
           widget.table.id!,
           AppConstants.tableStatusOccupied,
@@ -691,14 +792,12 @@ class _OrderScreenState extends State<OrderScreen> {
       
       setState(() {
         orderItems.removeWhere((i) => i.id == item.id);
+        treatCounts.remove(item.id); // Remove treat count for this item
       });
       
       await _updateOrderTotal();
-      
-      // If no items left, make table empty
       await _checkAndUpdateTableStatus();
       
-      // Force update table status in database to trigger table card refresh
       if (orderItems.isNotEmpty) {
         await _databaseService.updateTableStatus(
           widget.table.id!,
@@ -712,13 +811,37 @@ class _OrderScreenState extends State<OrderScreen> {
     }
   }
 
+  Future<void> _updateTreatItems() async {
+    try {
+      for (final item in orderItems) {
+        final treatCount = getTreatCountForItem(item.id!);
+        final shouldHaveTreatFlag = treatCount > 0;
+        
+        if (item.isTreat != shouldHaveTreatFlag) {
+          final updatedItem = item.copyWith(
+            isTreat: shouldHaveTreatFlag,
+            treatReason: shouldHaveTreatFlag ? 'İkram ($treatCount adet)' : null,
+          );
+          await _databaseService.updateOrderItem(updatedItem);
+          
+          final index = orderItems.indexWhere((i) => i.id == item.id);
+          if (index != -1) {
+            orderItems[index] = updatedItem;
+          }
+        }
+      }
+      
+      await _updateOrderTotal();
+    } catch (e) {
+      _showErrorSnackBar('İkramlar güncellenirken hata: $e');
+    }
+  }
+
   Future<void> _checkAndUpdateTableStatus() async {
     if (orderItems.isEmpty && currentOrder != null) {
       try {
-        // Delete empty order - FIX: Call deleteOrder instead of deleteOrderItem
         await _databaseService.deleteOrder(currentOrder!.id!);
         
-        // Update table status to empty
         await _databaseService.updateTableStatus(
           widget.table.id!,
           AppConstants.tableStatusEmpty,
@@ -734,7 +857,6 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _handleBackPress() async {
-    // Check if table should be empty when going back
     await _checkAndUpdateTableStatus();
     Navigator.of(context).pop();
   }
@@ -743,11 +865,19 @@ class _OrderScreenState extends State<OrderScreen> {
     if (currentOrder == null) return;
     
     try {
-      double subtotal = orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
+      double subtotal = calculateSubtotal();
+      double discountAmount = calculateDiscountAmount();
+      double treatAmount = calculateTreatAmount();
+      double finalTotal = calculateFinalTotal();
       
       final updatedOrder = currentOrder!.copyWith(
         subtotal: subtotal,
-        finalTotal: subtotal, // Will be updated with discounts in payment screen
+        discountAmount: discountAmount,
+        discountType: discountPercentage > 0 ? 'yüzde' : null,
+        discountReason: discountReason,
+        treatAmount: treatAmount,
+        treatReason: treatCounts.isNotEmpty ? 'İkram (${treatCounts.values.fold(0, (sum, count) => sum + count)} adet)' : null,
+        finalTotal: finalTotal,
       );
       
       await _databaseService.updateOrder(updatedOrder);
@@ -766,7 +896,6 @@ class _OrderScreenState extends State<OrderScreen> {
       return;
     }
     
-    // TODO: Navigate to payment screen
     _showInfoSnackBar('Ödeme ekranı yakında eklenecek...');
   }
 
@@ -786,11 +915,5 @@ class _OrderScreenState extends State<OrderScreen> {
         backgroundColor: AppColors.primary,
       ),
     );
-  }
-
-  double calculateFinalTotal() {
-    double subtotal = orderItems.fold(0.0, (sum, item) => sum + item.totalPrice);
-    double discountAmount = (subtotal * discountPercentage) / 100;
-    return subtotal - discountAmount - treatAmount;
   }
 }
