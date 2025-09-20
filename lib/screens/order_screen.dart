@@ -11,6 +11,7 @@ import '../utils/constants.dart';
 import '../widgets/menu_item_card.dart';
 import '../widgets/discount_dialog.dart';
 import '../widgets/treat_dialog.dart';
+import '../widgets/payment_dialog.dart';
 
 class OrderScreen extends StatefulWidget {
   final CafeTable table;
@@ -77,51 +78,14 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _loadOrCreateOrder() async {
-  try {
-    setState(() => isLoadingOrder = true);
-    
-    // Special handling for take away orders (table ID -1)
-    if (widget.table.id == -1) {
-      // For take away, always create a new order
-      final orderId = await _databaseService.insertOrder(Order(
-        tableId: -1, // Special table ID for take away
-        subtotal: 0.0,
-        finalTotal: 0.0,
-        status: AppConstants.orderStatusPending,
-        createdAt: DateTime.now(),
-      ));
+    try {
+      setState(() => isLoadingOrder = true);
       
-      currentOrder = await _databaseService.getOrderById(orderId);
-      orderItems = [];
-      
-      // Don't update table status for take away orders
-    } else {
-      // Normal table order handling
-      Order? existingOrder = await _databaseService.getCurrentOrderForTable(widget.table.id!);
-      
-      if (existingOrder != null) {
-        currentOrder = existingOrder;
-        orderItems = await _databaseService.getOrderItems(existingOrder.id!);
-        
-        // Load existing discounts
-        if (existingOrder.subtotal > 0) {
-          discountPercentage = existingOrder.discountAmount > 0 
-              ? (existingOrder.discountAmount / existingOrder.subtotal) * 100 
-              : 0.0;
-        }
-        discountReason = existingOrder.discountReason;
-        
-        // Load treat counts from database
-        treatCounts.clear();
-        for (final item in orderItems) {
-          if (item.isTreat) {
-            treatCounts[item.id!] = (treatCounts[item.id!] ?? 0) + 1;
-          }
-        }
-      } else {
-        // Create new order for normal table
+      // Special handling for take away orders (table ID -1)
+      if (widget.table.id == -1) {
+        // For take away, always create a new order
         final orderId = await _databaseService.insertOrder(Order(
-          tableId: widget.table.id!,
+          tableId: -1, // Special table ID for take away
           subtotal: 0.0,
           finalTotal: 0.0,
           status: AppConstants.orderStatusPending,
@@ -131,20 +95,58 @@ class _OrderScreenState extends State<OrderScreen> {
         currentOrder = await _databaseService.getOrderById(orderId);
         orderItems = [];
         
-        await _databaseService.updateTableStatus(
-          widget.table.id!,
-          AppConstants.tableStatusOccupied,
-          orderId: orderId,
-        );
+        // Don't update table status for take away orders
+      } else {
+        // Normal table order handling
+        Order? existingOrder = await _databaseService.getCurrentOrderForTable(widget.table.id!);
+        
+        if (existingOrder != null) {
+          currentOrder = existingOrder;
+          orderItems = await _databaseService.getOrderItems(existingOrder.id!);
+          
+          // Load existing discounts
+          if (existingOrder.subtotal > 0) {
+            discountPercentage = existingOrder.discountAmount > 0 
+                ? (existingOrder.discountAmount / existingOrder.subtotal) * 100 
+                : 0.0;
+          }
+          discountReason = existingOrder.discountReason;
+          
+          // Load treat counts from database
+          treatCounts.clear();
+          for (final item in orderItems) {
+            if (item.isTreat) {
+              treatCounts[item.id!] = (treatCounts[item.id!] ?? 0) + 1;
+            }
+          }
+        } else {
+          // Create new order for normal table
+          final orderId = await _databaseService.insertOrder(Order(
+            tableId: widget.table.id!,
+            subtotal: 0.0,
+            finalTotal: 0.0,
+            status: AppConstants.orderStatusPending,
+            createdAt: DateTime.now(),
+          ));
+          
+          currentOrder = await _databaseService.getOrderById(orderId);
+          orderItems = [];
+          
+          await _databaseService.updateTableStatus(
+            widget.table.id!,
+            AppConstants.tableStatusOccupied,
+            orderId: orderId,
+          );
+        }
       }
+      
+      setState(() => isLoadingOrder = false);
+    } catch (e) {
+      setState(() => isLoadingOrder = false);
+      _showErrorSnackBar('Sipariş yüklenirken hata: $e');
     }
-    
-    setState(() => isLoadingOrder = false);
-  } catch (e) {
-    setState(() => isLoadingOrder = false);
-    _showErrorSnackBar('Sipariş yüklenirken hata: $e');
   }
-}
+
   void _filterItemsByCategory() {
     if (selectedCategory.isEmpty) {
       filteredItems = menuItems;
@@ -712,57 +714,57 @@ class _OrderScreenState extends State<OrderScreen> {
     );
   }
 
-Future<void> _addItemToOrder(MenuItem menuItem) async {
-  try {
-    final existingIndex = orderItems.indexWhere((item) => item.menuItemName == menuItem.name);
-    
-    if (existingIndex != -1) {
-      final existingItem = orderItems[existingIndex];
-      final newQuantity = existingItem.quantity + 1;
-      final newTotalPrice = menuItem.price * newQuantity;
+  Future<void> _addItemToOrder(MenuItem menuItem) async {
+    try {
+      final existingIndex = orderItems.indexWhere((item) => item.menuItemName == menuItem.name);
       
-      final updatedItem = existingItem.copyWith(
-        quantity: newQuantity,
-        totalPrice: newTotalPrice,
-      );
+      if (existingIndex != -1) {
+        final existingItem = orderItems[existingIndex];
+        final newQuantity = existingItem.quantity + 1;
+        final newTotalPrice = menuItem.price * newQuantity;
+        
+        final updatedItem = existingItem.copyWith(
+          quantity: newQuantity,
+          totalPrice: newTotalPrice,
+        );
+        
+        await _databaseService.updateOrderItem(updatedItem);
+        
+        setState(() {
+          orderItems[existingIndex] = updatedItem;
+        });
+      } else {
+        final orderItem = OrderItem(
+          orderId: currentOrder!.id!,
+          menuItemName: menuItem.name,
+          quantity: 1,
+          unitPrice: menuItem.price,
+          totalPrice: menuItem.price,
+        );
+        
+        final itemId = await _databaseService.insertOrderItem(orderItem);
+        final newItem = orderItem.copyWith(id: itemId);
+        
+        setState(() {
+          orderItems.add(newItem);
+        });
+      }
       
-      await _databaseService.updateOrderItem(updatedItem);
+      await _updateOrderTotal();
       
-      setState(() {
-        orderItems[existingIndex] = updatedItem;
-      });
-    } else {
-      final orderItem = OrderItem(
-        orderId: currentOrder!.id!,
-        menuItemName: menuItem.name,
-        quantity: 1,
-        unitPrice: menuItem.price,
-        totalPrice: menuItem.price,
-      );
+      // Only update table status for normal tables, not take away
+      if (widget.table.id != -1) {
+        await _databaseService.updateTableStatus(
+          widget.table.id!,
+          AppConstants.tableStatusOccupied,
+          orderId: currentOrder!.id!,
+        );
+      }
       
-      final itemId = await _databaseService.insertOrderItem(orderItem);
-      final newItem = orderItem.copyWith(id: itemId);
-      
-      setState(() {
-        orderItems.add(newItem);
-      });
+    } catch (e) {
+      _showErrorSnackBar('Ürün eklenirken hata: $e');
     }
-    
-    await _updateOrderTotal();
-    
-    // Only update table status for normal tables, not take away
-    if (widget.table.id != -1) {
-      await _databaseService.updateTableStatus(
-        widget.table.id!,
-        AppConstants.tableStatusOccupied,
-        orderId: currentOrder!.id!,
-      );
-    }
-    
-  } catch (e) {
-    _showErrorSnackBar('Ürün eklenirken hata: $e');
   }
-}
 
   Future<void> _updateItemQuantity(OrderItem item, int newQuantity) async {
     if (newQuantity <= 0) {
@@ -795,11 +797,13 @@ Future<void> _addItemToOrder(MenuItem menuItem) async {
         
         await _updateOrderTotal();
         
-        await _databaseService.updateTableStatus(
-          widget.table.id!,
-          AppConstants.tableStatusOccupied,
-          orderId: currentOrder!.id!,
-        );
+        if (widget.table.id != -1) {
+          await _databaseService.updateTableStatus(
+            widget.table.id!,
+            AppConstants.tableStatusOccupied,
+            orderId: currentOrder!.id!,
+          );
+        }
       }
     } catch (e) {
       _showErrorSnackBar('Ürün güncellenirken hata: $e');
@@ -818,7 +822,7 @@ Future<void> _addItemToOrder(MenuItem menuItem) async {
       await _updateOrderTotal();
       await _checkAndUpdateTableStatus();
       
-      if (orderItems.isNotEmpty) {
+      if (orderItems.isNotEmpty && widget.table.id != -1) {
         await _databaseService.updateTableStatus(
           widget.table.id!,
           AppConstants.tableStatusOccupied,
@@ -858,31 +862,31 @@ Future<void> _addItemToOrder(MenuItem menuItem) async {
   }
 
   Future<void> _checkAndUpdateTableStatus() async {
-  if (orderItems.isEmpty && currentOrder != null && widget.table.id != -1) {
-    try {
-      await _databaseService.deleteOrder(currentOrder!.id!);
-      
-      await _databaseService.updateTableStatus(
-        widget.table.id!,
-        AppConstants.tableStatusEmpty,
-      );
-      
-      setState(() {
-        currentOrder = null;
-      });
-    } catch (e) {
-      print('Error updating table status: $e');
+    if (orderItems.isEmpty && currentOrder != null && widget.table.id != -1) {
+      try {
+        await _databaseService.deleteOrder(currentOrder!.id!);
+        
+        await _databaseService.updateTableStatus(
+          widget.table.id!,
+          AppConstants.tableStatusEmpty,
+        );
+        
+        setState(() {
+          currentOrder = null;
+        });
+      } catch (e) {
+        print('Error updating table status: $e');
+      }
     }
   }
-}
 
   Future<void> _handleBackPress() async {
-  // Only check and update table status for normal tables
-  if (widget.table.id != -1) {
-    await _checkAndUpdateTableStatus();
+    // Only check and update table status for normal tables
+    if (widget.table.id != -1) {
+      await _checkAndUpdateTableStatus();
+    }
+    Navigator.of(context).pop();
   }
-  Navigator.of(context).pop();
-}
 
   Future<void> _updateOrderTotal() async {
     if (currentOrder == null) return;
@@ -919,7 +923,220 @@ Future<void> _addItemToOrder(MenuItem menuItem) async {
       return;
     }
     
-    _showInfoSnackBar('Ödeme ekranı yakında eklenecek...');
+    final finalTotal = calculateFinalTotal();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (BuildContext context) {
+        return PaymentDialog(
+          totalAmount: finalTotal,
+          onPaymentSelected: _processPayment,
+        );
+      },
+    );
+  }
+
+  Future<void> _processPayment(String paymentMethod) async {
+    try {
+      // Close the payment dialog first
+      Navigator.of(context).pop();
+      
+      // Show loading indicator
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
+        },
+      );
+      
+      if (currentOrder == null) {
+        Navigator.of(context).pop(); // Close loading
+        _showErrorSnackBar('Sipariş bulunamadı');
+        return;
+      }
+      
+      // Calculate final amounts
+      double subtotal = calculateSubtotal();
+      double discountAmount = calculateDiscountAmount();
+      double treatAmount = calculateTreatAmount();
+      double finalTotal = calculateFinalTotal();
+      
+      // Update order with payment information
+      final completedOrder = currentOrder!.copyWith(
+        subtotal: subtotal,
+        discountAmount: discountAmount,
+        discountType: discountPercentage > 0 ? 'yüzde' : null,
+        discountReason: discountReason,
+        treatAmount: treatAmount,
+        treatReason: treatCounts.isNotEmpty ? 'İkram (${treatCounts.values.fold(0, (sum, count) => sum + count)} adet)' : null,
+        finalTotal: finalTotal,
+        paymentMethod: paymentMethod,
+        status: AppConstants.orderStatusCompleted,
+      );
+      
+      // Save the completed order
+      await _databaseService.updateOrder(completedOrder);
+      
+      // Update daily reports (optional)
+      final today = DateTime.now();
+      final dateString = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+      await _databaseService.updateDailyReport(dateString, finalTotal, 1);
+      
+      // Handle table cleanup for normal tables (not take away)
+      if (widget.table.id != -1) {
+        // Clear table status for normal tables
+        await _databaseService.updateTableStatus(
+          widget.table.id!,
+          AppConstants.tableStatusEmpty,
+        );
+      }
+      
+      // Close loading dialog
+      Navigator.of(context).pop();
+      
+      // Show success message
+      _showSuccessDialog(paymentMethod, finalTotal);
+      
+    } catch (e) {
+      // Close loading dialog if still open
+      Navigator.of(context).pop();
+      _showErrorSnackBar('Ödeme işlenirken hata oluştu: $e');
+    }
+  }
+
+  void _showSuccessDialog(String paymentMethod, double amount) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          content: Container(
+            width: 300,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Success icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppColors.emptyTable.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check_circle,
+                    size: 50,
+                    color: AppColors.emptyTable,
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                
+                const Text(
+                  'Ödeme Tamamlandı!',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                
+                const SizedBox(height: 16),
+                
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppColors.background,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Ödeme Yöntemi:',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                          Text(
+                            paymentMethod == 'nakit' ? 'Nakit' : 'Kredi Kartı',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Tutar:',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                          Text(
+                            '${amount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const SizedBox(height: 20),
+                
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: _returnToTableSelection,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Tamam',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _returnToTableSelection() {
+    // Close success dialog
+    Navigator.of(context).pop();
+    
+    // Return to table selection screen
+    Navigator.of(context).pop();
   }
 
   void _showErrorSnackBar(String message) {
@@ -927,6 +1144,15 @@ Future<void> _addItemToOrder(MenuItem menuItem) async {
       SnackBar(
         content: Text(message),
         backgroundColor: AppColors.occupiedTable,
+      ),
+    );
+  }
+
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppColors.emptyTable,
       ),
     );
   }
