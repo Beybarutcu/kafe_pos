@@ -58,30 +58,6 @@ class _TreatDialogState extends State<TreatDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              padding: const EdgeInsets.all(16), // Increased padding
-              decoration: BoxDecoration(
-                color: AppColors.treat.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppColors.treat.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: AppColors.treat, size: 24), // Increased icon size
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      'Her ürün için kaç adedinin ikram olacağını seçin. Örnek: 5 adet espresso varsa, 2 tanesini ikram yapabilirsiniz.',
-                      style: TextStyle(
-                        fontSize: 14, // Increased font size
-                        color: AppColors.treat,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
             const SizedBox(height: 20), // Increased spacing
             Expanded(
               child: ListView.builder(
