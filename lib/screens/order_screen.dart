@@ -1,4 +1,4 @@
-// lib/screens/order_screen.dart - Updated with Split Payment Feature
+// lib/screens/order_screen.dart
 import 'package:flutter/material.dart';
 import '../models/table.dart';
 import '../models/menu_item.dart';
@@ -11,8 +11,7 @@ import '../utils/constants.dart';
 import '../widgets/menu_item_card.dart';
 import '../widgets/discount_dialog.dart';
 import '../widgets/treat_dialog.dart';
-import '../widgets/payment_dialog.dart';
-import '../widgets/split_payment_dialog.dart'; // NEW IMPORT
+import '../widgets/split_payment_dialog.dart';
 
 class OrderScreen extends StatefulWidget {
   final CafeTable table;
@@ -28,9 +27,7 @@ class OrderScreen extends StatefulWidget {
 
 class _OrderScreenState extends State<OrderScreen> {
   final DatabaseService _databaseService = DatabaseService();
-
-  bool isOrderSummaryExpanded = false;
-
+  
   List<String> categories = [];
   List<MenuItem> menuItems = [];
   List<MenuItem> filteredItems = [];
@@ -41,8 +38,8 @@ class _OrderScreenState extends State<OrderScreen> {
   
   bool isLoadingMenu = true;
   bool isLoadingOrder = false;
+  bool isOrderSummaryExpanded = false;
   
-  // Discount and treat state
   double discountPercentage = 0.0;
   String? discountReason;
   Map<int, int> treatCounts = {};
@@ -183,7 +180,6 @@ class _OrderScreenState extends State<OrderScreen> {
     return subtotal - discountAmount - treatAmount;
   }
 
-  // Turkish alphabetical comparison
   int _turkishCompare(String a, String b) {
     const turkishOrder = 'AaBbCcÇçDdEeFfGgĞğHhIıİiJjKkLlMmNnOoÖöPpRrSsŞşTtUuÜüVvYyZz';
     
@@ -204,506 +200,39 @@ class _OrderScreenState extends State<OrderScreen> {
     return a.length - b.length;
   }
 
- @override
-Widget build(BuildContext context) {
-  final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
-  
-  return Scaffold(
-    backgroundColor: AppColors.background,
-    appBar: AppBar(
-      title: Text('${widget.table.name} - Sipariş'),
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      leading: IconButton(
-        icon: const Icon(Icons.arrow_back),
-        onPressed: _handleBackPress,
+  @override
+  Widget build(BuildContext context) {
+    final isPortrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      appBar: AppBar(
+        title: Text('${widget.table.name} - Sipariş'),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _handleBackPress,
+        ),
       ),
-      // REMOVED: actions with payment button
-    ),
-    body: isLoadingMenu || isLoadingOrder
-        ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
-        : isPortrait ? _buildVerticalLayout() : _buildHorizontalLayout(),
-  );
-}
+      body: isLoadingMenu || isLoadingOrder
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary))
+          : isPortrait ? _buildVerticalLayout() : _buildHorizontalLayout(),
+    );
+  }
 
+  // VERTICAL LAYOUT
   Widget _buildVerticalLayout() {
-  return Column(
-    children: [
-      _buildCategoryTabs(),
-      Expanded(
-        child: _buildScrollableMenuList(),
-      ),
-      // Expandable order summary
-      if (orderItems.isNotEmpty) _buildExpandableOrderSummary(),
-    ],
-  );
-}
-Widget _buildExpandableOrderSummary() {
-  double finalTotal = calculateFinalTotal();
-  
-  return Container(
-    decoration: BoxDecoration(
-      color: AppColors.cardBackground,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.1),
-          blurRadius: 8,
-          offset: const Offset(0, -2),
-        ),
-      ],
-    ),
-    child: SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Collapsed header - always visible
-          InkWell(
-            onTap: () {
-              setState(() {
-                isOrderSummaryExpanded = !isOrderSummaryExpanded;
-              });
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  // Expand/Collapse icon
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(
-                      isOrderSummaryExpanded ? Icons.expand_more : Icons.expand_less,
-                      color: AppColors.primary,
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  // Order info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Sipariş Özeti',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          '${orderItems.length} Ürün',
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Total price
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Toplam',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          // Expanded content - order items list
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
-            height: isOrderSummaryExpanded ? 300 : 0,
-            child: isOrderSummaryExpanded
-                ? Column(
-                    children: [
-                      const Divider(height: 1),
-                      Expanded(
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          itemCount: orderItems.length,
-                          itemBuilder: (context, index) {
-                            return _buildVerticalOrderItem(orderItems[index]);
-                          },
-                        ),
-                      ),
-                      const Divider(height: 1),
-                      _buildOrderSummaryTotals(),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-          ),
-          
-          // Action buttons - always visible
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-            child: Row(
-              children: [
-                // Discount button
-                IconButton(
-                  onPressed: _showDiscountDialog,
-                  icon: const Icon(Icons.percent),
-                  color: discountPercentage > 0 ? AppColors.discount : AppColors.textSecondary,
-                  style: IconButton.styleFrom(
-                    backgroundColor: discountPercentage > 0 
-                        ? AppColors.discount.withOpacity(0.1)
-                        : Colors.transparent,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Treat button
-                IconButton(
-                  onPressed: _showTreatDialog,
-                  icon: const Icon(Icons.favorite),
-                  color: treatCounts.isNotEmpty ? AppColors.treat : AppColors.textSecondary,
-                  style: IconButton.styleFrom(
-                    backgroundColor: treatCounts.isNotEmpty 
-                        ? AppColors.treat.withOpacity(0.1)
-                        : Colors.transparent,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Payment button
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _showSplitPaymentDialog,
-                    icon: const Icon(Icons.payment, size: 20),
-                    label: const Text('Ödeme'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-Widget _buildVerticalOrderItem(OrderItem item) {
-  final treatCount = getTreatCountForItem(item.id!);
-  
-  return Container(
-    margin: const EdgeInsets.only(bottom: 8),
-    decoration: BoxDecoration(
-      color: item.isPaid 
-          ? Colors.grey.shade100 
-          : (item.isPartiallyPaid ? Colors.blue.shade50 : Colors.white),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: item.isPaid 
-            ? Colors.grey.shade300 
-            : (item.isPartiallyPaid ? Colors.blue.shade200 : Colors.grey.shade200),
-      ),
-    ),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Left side - Item info
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Item name and status
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        item.menuItemName,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          decoration: item.isPaid ? TextDecoration.lineThrough : null,
-                          color: item.isPaid ? Colors.grey : AppColors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    if (item.isPaid)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.green.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check, size: 12, color: Colors.green.shade700),
-                            const SizedBox(width: 2),
-                            Text(
-                              'Ödendi',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.green.shade700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      )
-                    else if (item.isPartiallyPaid)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.shade100,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          'Kısmi',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.blue.shade700,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // Price and quantity
-                Row(
-                  children: [
-                    Text(
-                      item.formattedUnitPrice,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    Text(
-                      ' × ${item.quantity}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
-                ),
-                // Partial payment info
-                if (item.isPartiallyPaid)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      '${item.paidQuantity} ödendi, ${item.remainingQuantity} kaldı',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.blue.shade700,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                // Treat info
-                if (treatCount > 0)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      children: [
-                        Icon(Icons.favorite, size: 11, color: AppColors.treat),
-                        const SizedBox(width: 4),
-                        Text(
-                          'İkram: $treatCount adet',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.treat,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(width: 12),
-          
-          // Right side - Quantity controls and price
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              // Quantity controls
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove),
-                      onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity - 1),
-                      iconSize: 18,
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 28),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${item.quantity}',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add),
-                      onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity + 1),
-                      iconSize: 18,
-                      padding: const EdgeInsets.all(6),
-                      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              // Total price
-              Text(
-                item.formattedTotalPrice,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: item.isPaid ? Colors.grey : AppColors.primary,
-                  decoration: item.isPaid ? TextDecoration.lineThrough : null,
-                ),
-              ),
-              if (item.isPartiallyPaid)
-                Text(
-                  'Kalan: ${item.formattedRemainingAmount}',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              const SizedBox(height: 4),
-              // Delete button
-              if (!item.isPaid)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _removeItemFromOrder(item),
-                  color: Colors.red.shade400,
-                  iconSize: 20,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                ),
-            ],
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-// 5. NEW METHOD: Order summary totals section
-Widget _buildOrderSummaryTotals() {
-  double subtotal = calculateSubtotal();
-  double discountAmount = calculateDiscountAmount();
-  double treatAmount = calculateTreatAmount();
-  double finalTotal = calculateFinalTotal();
-  
-  return Container(
-    padding: const EdgeInsets.all(16),
-    color: Colors.grey.shade50,
-    child: Column(
+    return Column(
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text('Ara Toplam:', style: TextStyle(fontSize: 14)),
-            Text(
-              '${subtotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-          ],
+        _buildCategoryTabs(),
+        Expanded(
+          child: _buildScrollableMenuList(),
         ),
-        if (discountAmount > 0) ...[
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'İndirim (%${discountPercentage.toStringAsFixed(0)}):',
-                style: const TextStyle(fontSize: 14, color: AppColors.discount),
-              ),
-              Text(
-                '-${discountAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                style: const TextStyle(fontSize: 14, color: AppColors.discount, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ],
-        if (treatAmount > 0) ...[
-          const SizedBox(height: 6),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('İkram:', style: TextStyle(fontSize: 14, color: AppColors.treat)),
-              Text(
-                '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                style: const TextStyle(fontSize: 14, color: AppColors.treat, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ],
-        if (discountAmount > 0 || treatAmount > 0) const Divider(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Toplam:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-          ],
-        ),
+        if (orderItems.isNotEmpty) _buildExpandableOrderSummary(),
       ],
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildScrollableMenuList() {
     if (filteredItems.isEmpty) {
@@ -718,167 +247,561 @@ Widget _buildOrderSummaryTotals() {
     final sortedItems = List<MenuItem>.from(filteredItems);
     sortedItems.sort((a, b) => _turkishCompare(a.name, b.name));
 
-    return ListView.builder(
+    return GridView.builder(
       padding: const EdgeInsets.all(12),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 4, // 4 items per row
+        crossAxisSpacing: 10,
+        mainAxisSpacing: 10,
+        childAspectRatio: 0.85, // Slightly taller than square
+      ),
       itemCount: sortedItems.length,
       itemBuilder: (context, index) {
         final item = sortedItems[index];
-        return _buildCompactMenuItem(item);
+        return _buildSquareMenuItem(item);
       },
     );
   }
 
-  Widget _buildCompactMenuItem(MenuItem item) {
+  // SQUARE MENU ITEM CARD (4 per row)
+  Widget _buildSquareMenuItem(MenuItem item) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        onTap: () => _addItemToOrder(item),
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(
-            color: AppColors.cardBackground,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.background, width: 1),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200, width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textPrimary,
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _addItemToOrder(item),
+          borderRadius: BorderRadius.circular(12),
+          child: Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Item name (top)
+                Expanded(
+                  child: Center(
+                    child: Text(
+                      item.name,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.emptyTable.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
+                
+                const SizedBox(height: 8),
+                
+                // Price (middle)
+                Text(
                   item.formattedPrice,
                   style: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 16,
                     fontWeight: FontWeight.bold,
-                    color: AppColors.emptyTable,
+                    color: AppColors.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                
+                const SizedBox(height: 8),
+                
+                // Add button (bottom)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.add, color: Colors.white, size: 16),
+                      SizedBox(width: 4),
+                      Text(
+                        'Ekle',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: AppColors.primary,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Icon(
-                  Icons.add,
-                  color: Colors.white,
-                  size: 18,
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildPortraitOrderBar() {
-  if (orderItems.isEmpty) return const SizedBox.shrink();
-  
-  double finalTotal = calculateFinalTotal();
-  
-  return Container(
-    decoration: BoxDecoration(
-      color: AppColors.cardBackground,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.1),
-          blurRadius: 8,
-          offset: const Offset(0, -2),
-        ),
-      ],
-    ),
-    child: SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
+  // EXPANDABLE ORDER SUMMARY
+  Widget _buildExpandableOrderSummary() {
+    double finalTotal = calculateFinalTotal();
+    
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+            InkWell(
+              onTap: () {
+                setState(() {
+                  isOrderSummaryExpanded = !isOrderSummaryExpanded;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(
+                        isOrderSummaryExpanded ? Icons.expand_more : Icons.expand_less,
+                        color: AppColors.primary,
+                        size: 24,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Sipariş Özeti',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textSecondary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${orderItems.length} Ürün',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          'Toplam',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              height: isOrderSummaryExpanded ? 300 : 0,
+              child: isOrderSummaryExpanded
+                  ? Column(
+                      children: [
+                        const Divider(height: 1),
+                        Expanded(
+                          child: ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            itemCount: orderItems.length,
+                            itemBuilder: (context, index) {
+                              return _buildVerticalOrderItem(orderItems[index]);
+                            },
+                          ),
+                        ),
+                        const Divider(height: 1),
+                        _buildOrderSummaryTotals(),
+                      ],
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(
                 children: [
-                  Text(
-                    '${orderItems.length} Ürün',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      color: AppColors.textSecondary,
+                  IconButton(
+                    onPressed: _showDiscountDialog,
+                    icon: const Icon(Icons.percent),
+                    color: discountPercentage > 0 ? AppColors.discount : AppColors.textSecondary,
+                    style: IconButton.styleFrom(
+                      backgroundColor: discountPercentage > 0 
+                          ? AppColors.discount.withOpacity(0.1)
+                          : Colors.transparent,
                     ),
                   ),
-                  Text(
-                    '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _showTreatDialog,
+                    icon: const Icon(Icons.favorite),
+                    color: treatCounts.isNotEmpty ? AppColors.treat : AppColors.textSecondary,
+                    style: IconButton.styleFrom(
+                      backgroundColor: treatCounts.isNotEmpty 
+                          ? AppColors.treat.withOpacity(0.1)
+                          : Colors.transparent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _showSplitPaymentDialog,
+                      icon: const Icon(Icons.payment, size: 20),
+                      label: const Text('Ödeme'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-            IconButton(
-              onPressed: _showDiscountDialog,
-              icon: const Icon(Icons.percent),
-              color: discountPercentage > 0 ? AppColors.discount : AppColors.textSecondary,
-              style: IconButton.styleFrom(
-                backgroundColor: discountPercentage > 0 
-                    ? AppColors.discount.withOpacity(0.1)
-                    : Colors.transparent,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildVerticalOrderItem(OrderItem item) {
+    final treatCount = getTreatCountForItem(item.id!);
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(
+        color: item.isPaid 
+            ? Colors.grey.shade100 
+            : (item.isPartiallyPaid ? Colors.blue.shade50 : Colors.white),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: item.isPaid 
+              ? Colors.grey.shade300 
+              : (item.isPartiallyPaid ? Colors.blue.shade200 : Colors.grey.shade200),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.menuItemName,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                            color: item.isPaid ? Colors.grey : AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                      if (item.isPaid)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.green.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.check, size: 12, color: Colors.green.shade700),
+                              const SizedBox(width: 2),
+                              Text(
+                                'Ödendi',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.green.shade700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (item.isPartiallyPaid)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Kısmi',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blue.shade700,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Text(
+                        item.formattedUnitPrice,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      Text(
+                        ' × ${item.quantity}',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (item.isPartiallyPaid)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Text(
+                        '${item.paidQuantity} ödendi, ${item.remainingQuantity} kaldı',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  if (treatCount > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.favorite, size: 11, color: AppColors.treat),
+                          const SizedBox(width: 4),
+                          Text(
+                            'İkram: $treatCount adet',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.treat,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
               ),
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              onPressed: _showTreatDialog,
-              icon: const Icon(Icons.favorite),
-              color: treatCounts.isNotEmpty ? AppColors.treat : AppColors.textSecondary,
-              style: IconButton.styleFrom(
-                backgroundColor: treatCounts.isNotEmpty 
-                    ? AppColors.treat.withOpacity(0.1)
-                    : Colors.transparent,
-              ),
-            ),
+            
             const SizedBox(width: 12),
-            // ONLY Payment button - renamed from "Kişi Bazlı"
-            ElevatedButton.icon(
-              onPressed: _showSplitPaymentDialog,
-              icon: const Icon(Icons.payment, size: 20),
-              label: const Text('Ödeme'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primary,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+            
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove),
+                        onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity - 1),
+                        iconSize: 18,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 28),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${item.quantity}',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity + 1),
+                        iconSize: 18,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                const SizedBox(height: 8),
+                Text(
+                  item.formattedTotalPrice,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: item.isPaid ? Colors.grey : AppColors.primary,
+                    decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                  ),
+                ),
+                if (item.isPartiallyPaid)
+                  Text(
+                    'Kalan: ${item.formattedRemainingAmount}',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                if (!item.isPaid)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _removeItemFromOrder(item),
+                    color: Colors.red.shade400,
+                    iconSize: 20,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  ),
+              ],
             ),
           ],
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  // Horizontal layout for tablet/landscape
+  Widget _buildOrderSummaryTotals() {
+    double subtotal = calculateSubtotal();
+    double discountAmount = calculateDiscountAmount();
+    double treatAmount = calculateTreatAmount();
+    double finalTotal = calculateFinalTotal();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      color: Colors.grey.shade50,
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text('Ara Toplam:', style: TextStyle(fontSize: 14)),
+              Text(
+                '${subtotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
+            ],
+          ),
+          if (discountAmount > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'İndirim (%${discountPercentage.toStringAsFixed(0)}):',
+                  style: const TextStyle(fontSize: 14, color: AppColors.discount),
+                ),
+                Text(
+                  '-${discountAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                  style: const TextStyle(fontSize: 14, color: AppColors.discount, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
+          if (treatAmount > 0) ...[
+            const SizedBox(height: 6),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('İkram:', style: TextStyle(fontSize: 14, color: AppColors.treat)),
+                Text(
+                  '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                  style: const TextStyle(fontSize: 14, color: AppColors.treat, fontWeight: FontWeight.w600),
+                ),
+              ],
+            ),
+          ],
+          if (discountAmount > 0 || treatAmount > 0) const Divider(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Toplam:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // HORIZONTAL LAYOUT
   Widget _buildHorizontalLayout() {
     return Row(
       children: [
@@ -910,7 +833,8 @@ Widget _buildOrderSummaryTotals() {
 
   Widget _buildCategoryTabs() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      color: Colors.white,
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -919,44 +843,40 @@ Widget _buildOrderSummaryTotals() {
             final isFavorites = category == 'Favoriler';
             
             return Padding(
-              padding: const EdgeInsets.only(right: 12),
-              child: InkWell(
-                onTap: () {
-                  setState(() {
-                    selectedCategory = category;
-                    _filterItemsByCategory();
-                  });
-                },
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: isSelected 
-                        ? (isFavorites ? AppColors.treat : AppColors.primary)
-                        : AppColors.cardBackground,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
+              padding: const EdgeInsets.only(right: 8),
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () {
+                    setState(() {
+                      selectedCategory = category;
+                      _filterItemsByCategory();
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(10),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    decoration: BoxDecoration(
                       color: isSelected 
                           ? (isFavorites ? AppColors.treat : AppColors.primary)
-                          : AppColors.background,
-                      width: 2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.1),
-                        blurRadius: 4,
-                        offset: const Offset(0, 2),
+                          : Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: isSelected 
+                            ? (isFavorites ? AppColors.treat : AppColors.primary)
+                            : Colors.grey.shade200,
+                        width: 1.5,
                       ),
-                    ],
-                  ),
-                  child: Text(
-                    category,
-                    style: TextStyle(
-                      color: isSelected ? Colors.white : AppColors.textPrimary,
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
                     ),
-                    textAlign: TextAlign.center,
+                    child: Text(
+                      category,
+                      style: TextStyle(
+                        color: isSelected ? Colors.white : AppColors.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
                   ),
                 ),
               ),
@@ -1043,396 +963,382 @@ Widget _buildOrderSummaryTotals() {
     );
   }
 
-  // REPLACE THE _buildOrderItem METHOD IN order_screen.dart WITH THIS:
-
-Widget _buildOrderItem(OrderItem item) {
-  final treatCount = getTreatCountForItem(item.id!);
-  
-  return Card(
-    margin: const EdgeInsets.only(bottom: 8),
-    elevation: item.isPaid ? 0 : 2,
-    color: item.isPaid 
-        ? Colors.grey.shade100 
-        : (item.isPartiallyPaid ? Colors.blue.shade50 : Colors.white),
-    child: Padding(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Item name and payment status
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  item.menuItemName,
+  Widget _buildOrderItem(OrderItem item) {
+    final treatCount = getTreatCountForItem(item.id!);
+    
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      elevation: item.isPaid ? 0 : 2,
+      color: item.isPaid 
+          ? Colors.grey.shade100 
+          : (item.isPartiallyPaid ? Colors.blue.shade50 : Colors.white),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    item.menuItemName,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                      color: item.isPaid ? Colors.grey : AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (item.isPaid)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.check_circle, size: 14, color: Colors.green.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Ödendi',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.green.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                else if (item.isPartiallyPaid)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.schedule, size: 14, color: Colors.blue.shade700),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Kısmi',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+            
+            const SizedBox(height: 8),
+            
+            Row(
+              children: [
+                Text(
+                  item.formattedUnitPrice,
                   style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    decoration: item.isPaid ? TextDecoration.lineThrough : null,
-                    color: item.isPaid ? Colors.grey : AppColors.textPrimary,
+                    fontSize: 13,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                
+                const SizedBox(width: 12),
+                
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.remove),
+                        onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity - 1),
+                        iconSize: 20,
+                        padding: const EdgeInsets.all(8),
+                      ),
+                      Container(
+                        constraints: const BoxConstraints(minWidth: 30),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${item.quantity}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.add),
+                        onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity + 1),
+                        iconSize: 20,
+                        padding: const EdgeInsets.all(8),
+                      ),
+                    ],
+                  ),
+                ),
+                
+                const Spacer(),
+                
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      item.formattedTotalPrice,
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: item.isPaid ? Colors.grey : AppColors.primary,
+                        decoration: item.isPaid ? TextDecoration.lineThrough : null,
+                      ),
+                    ),
+                    if (item.isPartiallyPaid)
+                      Text(
+                        'Kalan: ${item.formattedRemainingAmount}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.primary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+                
+                const SizedBox(width: 8),
+                
+                if (!item.isPaid)
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () => _removeItemFromOrder(item),
+                    color: Colors.red.shade400,
+                    iconSize: 22,
+                  ),
+              ],
+            ),
+            
+            if (item.isPartiallyPaid)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: Colors.blue.shade200,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.info_outline, size: 14, color: Colors.blue.shade700),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${item.paidQuantity} adet ödendi, ${item.remainingQuantity} adet kaldı',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.blue.shade700,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            
+            if (treatCount > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.treat.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: AppColors.treat.withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.favorite, size: 14, color: AppColors.treat),
+                      const SizedBox(width: 6),
+                      Text(
+                        'İkram: $treatCount adet',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.treat,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              // Payment status badge
-              if (item.isPaid)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.green.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.check_circle, size: 14, color: Colors.green.shade700),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Ödendi',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.green.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else if (item.isPartiallyPaid)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade100,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.schedule, size: 14, color: Colors.blue.shade700),
-                      const SizedBox(width: 4),
-                      Text(
-                        'Kısmi',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blue.shade700,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderTotal() {
+    double subtotal = calculateSubtotal();
+    double discountAmount = calculateDiscountAmount();
+    double treatAmount = calculateTreatAmount();
+    double finalTotal = calculateFinalTotal();
+    
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.cardBackground,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Ara Toplam:',
+                style: TextStyle(fontSize: 14),
+              ),
+              Text(
+                '${subtotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+              ),
             ],
           ),
           
-          const SizedBox(height: 8),
+          if (discountAmount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'İndirim (%${discountPercentage.toStringAsFixed(0)}):',
+                    style: const TextStyle(fontSize: 14, color: AppColors.discount),
+                  ),
+                  Text(
+                    '-${discountAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                    style: const TextStyle(fontSize: 14, color: AppColors.discount),
+                  ),
+                ],
+              ),
+            ),
           
-          // Price, quantity controls, and total in one row
+          if (treatAmount > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'İkram:',
+                    style: TextStyle(fontSize: 14, color: AppColors.treat),
+                  ),
+                  Text(
+                    '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                    style: const TextStyle(fontSize: 14, color: AppColors.treat),
+                  ),
+                ],
+              ),
+            ),
+          
+          if (discountAmount > 0 || treatAmount > 0)
+            const Divider(height: 16),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Toplam:',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
+                style: const TextStyle(
+                  fontSize: 16, 
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          
+          const SizedBox(height: 16),
+          
           Row(
             children: [
-              // Unit price
-              Text(
-                item.formattedUnitPrice,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: Colors.grey.shade600,
+              IconButton(
+                onPressed: _showDiscountDialog,
+                icon: const Icon(Icons.percent),
+                color: discountPercentage > 0 ? AppColors.discount : AppColors.textSecondary,
+                style: IconButton.styleFrom(
+                  backgroundColor: discountPercentage > 0 
+                      ? AppColors.discount.withOpacity(0.1)
+                      : Colors.transparent,
+                ),
+              ),
+              
+              const SizedBox(width: 8),
+              
+              IconButton(
+                onPressed: _showTreatDialog,
+                icon: const Icon(Icons.favorite),
+                color: treatCounts.isNotEmpty ? AppColors.treat : AppColors.textSecondary,
+                style: IconButton.styleFrom(
+                  backgroundColor: treatCounts.isNotEmpty 
+                      ? AppColors.treat.withOpacity(0.1)
+                      : Colors.transparent,
                 ),
               ),
               
               const SizedBox(width: 12),
               
-              // Quantity controls
-              Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.remove),
-                      onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity - 1),
-                      iconSize: 20,
-                      padding: const EdgeInsets.all(8),
-                    ),
-                    Container(
-                      constraints: const BoxConstraints(minWidth: 30),
-                      alignment: Alignment.center,
-                      child: Text(
-                        '${item.quantity}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add),
-                      onPressed: item.isPaid ? null : () => _updateItemQuantity(item, item.quantity + 1),
-                      iconSize: 20,
-                      padding: const EdgeInsets.all(8),
-                    ),
-                  ],
-                ),
-              ),
-              
-              const Spacer(),
-              
-              // Total price column
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    item.formattedTotalPrice,
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: item.isPaid ? Colors.grey : AppColors.primary,
-                      decoration: item.isPaid ? TextDecoration.lineThrough : null,
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _showSplitPaymentDialog,
+                  icon: const Icon(Icons.payment, size: 20),
+                  label: const Text('Ödeme'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  if (item.isPartiallyPaid)
-                    Text(
-                      'Kalan: ${item.formattedRemainingAmount}',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                ],
-              ),
-              
-              const SizedBox(width: 8),
-              
-              // Delete button
-              if (!item.isPaid)
-                IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => _removeItemFromOrder(item),
-                  color: Colors.red.shade400,
-                  iconSize: 22,
                 ),
+              ),
             ],
           ),
-          
-          // Partially paid indicator (better design)
-          if (item.isPartiallyPaid)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(
-                          color: Colors.blue.shade200,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.info_outline, size: 14, color: Colors.blue.shade700),
-                          const SizedBox(width: 6),
-                          Text(
-                            '${item.paidQuantity} adet ödendi, ${item.remainingQuantity} adet kaldı',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Colors.blue.shade700,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          
-          // Treat indicator
-          if (treatCount > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.treat.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                    color: AppColors.treat.withOpacity(0.3),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.favorite, size: 14, color: AppColors.treat),
-                    const SizedBox(width: 6),
-                    Text(
-                      'İkram: $treatCount adet',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppColors.treat,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
         ],
       ),
-    ),
-  );
-}
-
-  Widget _buildOrderTotal() {
-  double subtotal = calculateSubtotal();
-  double discountAmount = calculateDiscountAmount();
-  double treatAmount = calculateTreatAmount();
-  double finalTotal = calculateFinalTotal();
-  
-  return Container(
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: AppColors.cardBackground,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.1),
-          blurRadius: 8,
-          offset: const Offset(0, -2),
-        ),
-      ],
-    ),
-    child: Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Ara Toplam:',
-              style: TextStyle(fontSize: 14),
-            ),
-            Text(
-              '${subtotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-        
-        if (discountAmount > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'İndirim (%${discountPercentage.toStringAsFixed(0)}):',
-                  style: const TextStyle(fontSize: 14, color: AppColors.discount),
-                ),
-                Text(
-                  '-${discountAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                  style: const TextStyle(fontSize: 14, color: AppColors.discount),
-                ),
-              ],
-            ),
-          ),
-        
-        if (treatAmount > 0)
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'İkram:',
-                  style: TextStyle(fontSize: 14, color: AppColors.treat),
-                ),
-                Text(
-                  '-${treatAmount.toStringAsFixed(2)} ${TurkishStrings.currency}',
-                  style: const TextStyle(fontSize: 14, color: AppColors.treat),
-                ),
-              ],
-            ),
-          ),
-        
-        if (discountAmount > 0 || treatAmount > 0)
-          const Divider(height: 16),
-        
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Toplam:',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '${finalTotal.toStringAsFixed(2)} ${TurkishStrings.currency}',
-              style: const TextStyle(
-                fontSize: 16, 
-                fontWeight: FontWeight.bold,
-                color: AppColors.primary,
-              ),
-            ),
-          ],
-        ),
-        
-        const SizedBox(height: 16),
-        
-        Row(
-          children: [
-            // Discount button
-            IconButton(
-              onPressed: _showDiscountDialog,
-              icon: const Icon(Icons.percent),
-              color: discountPercentage > 0 ? AppColors.discount : AppColors.textSecondary,
-              style: IconButton.styleFrom(
-                backgroundColor: discountPercentage > 0 
-                    ? AppColors.discount.withOpacity(0.1)
-                    : Colors.transparent,
-              ),
-            ),
-            
-            const SizedBox(width: 8),
-            
-            // Treat button
-            IconButton(
-              onPressed: _showTreatDialog,
-              icon: const Icon(Icons.favorite),
-              color: treatCounts.isNotEmpty ? AppColors.treat : AppColors.textSecondary,
-              style: IconButton.styleFrom(
-                backgroundColor: treatCounts.isNotEmpty 
-                    ? AppColors.treat.withOpacity(0.1)
-                    : Colors.transparent,
-              ),
-            ),
-            
-            const SizedBox(width: 12),
-            
-            // ONLY Payment button - full width
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _showSplitPaymentDialog,
-                icon: const Icon(Icons.payment, size: 20),
-                label: const Text('Ödeme'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
 
   void _showDiscountDialog() {
     showDialog(
@@ -1471,7 +1377,6 @@ Widget _buildOrderItem(OrderItem item) {
     );
   }
 
-  // NEW: Show Split Payment Dialog
   void _showSplitPaymentDialog() {
     if (orderItems.isEmpty) {
       _showErrorSnackBar('Sipariş boş, önce ürün ekleyin');
@@ -1490,7 +1395,6 @@ Widget _buildOrderItem(OrderItem item) {
     );
   }
 
-  // NEW: Process Split Payment
   Future<void> _processSplitPayment(List<OrderItem> paidItems, String paymentMethod) async {
     try {
       showDialog(
@@ -1505,16 +1409,13 @@ Widget _buildOrderItem(OrderItem item) {
       
       double paidAmount = 0.0;
       
-      // Update each paid item in the database
       for (var item in paidItems) {
         await _databaseService.updateOrderItem(item);
         
-        // Calculate the amount just paid for this item
         final oldItem = orderItems.firstWhere((i) => i.id == item.id);
         int justPaidQty = item.paidQuantity - oldItem.paidQuantity;
         paidAmount += item.unitPrice * justPaidQty;
         
-        // Update local orderItems list
         final index = orderItems.indexWhere((i) => i.id == item.id);
         if (index != -1) {
           setState(() {
@@ -1523,17 +1424,14 @@ Widget _buildOrderItem(OrderItem item) {
         }
       }
       
-      // Check if all items are paid
       bool allPaid = orderItems.every((item) => item.isPaid);
       
       if (allPaid) {
-        // Complete the order
         await _completeFullOrder();
       } else {
-        // Partial payment - just update the order
         await _updateOrderTotal();
         
-        Navigator.of(context).pop(); // Close loading dialog
+        Navigator.of(context).pop();
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1551,7 +1449,6 @@ Widget _buildOrderItem(OrderItem item) {
     }
   }
 
-  // NEW: Complete Full Order
   Future<void> _completeFullOrder() async {
     try {
       if (currentOrder == null) return;
@@ -1571,7 +1468,7 @@ Widget _buildOrderItem(OrderItem item) {
             ? 'İkram (${treatCounts.values.fold(0, (sum, count) => sum + count)} adet)' 
             : null,
         finalTotal: finalTotal,
-        paymentMethod: 'karışık', // Mixed payment
+        paymentMethod: 'karışık',
         status: AppConstants.orderStatusCompleted,
       );
       
@@ -1588,7 +1485,7 @@ Widget _buildOrderItem(OrderItem item) {
         );
       }
       
-      Navigator.of(context).pop(); // Close loading dialog
+      Navigator.of(context).pop();
       
       _showSuccessDialog('karışık', finalTotal);
       
@@ -1799,8 +1696,6 @@ Widget _buildOrderItem(OrderItem item) {
       _showErrorSnackBar('Sipariş güncellenirken hata: $e');
     }
   }
-
-  
 
   void _showSuccessDialog(String paymentMethod, double amount) {
     showDialog(
