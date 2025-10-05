@@ -1,6 +1,6 @@
 class AppConstants {
   static const String dbName = 'kafe_pos.db';
-  static const int dbVersion = 1;
+  static const int dbVersion = 2;
   
   // Order Status
   static const String orderStatusPending = 'beklemede';

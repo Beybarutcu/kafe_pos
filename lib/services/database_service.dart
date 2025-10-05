@@ -1,4 +1,5 @@
 // lib/services/database_service.dart
+// COMPLETE UPDATED VERSION WITH SPLIT PAYMENT SUPPORT
 import 'dart:async';
 import 'dart:io';
 import 'package:sqflite/sqflite.dart';
@@ -85,7 +86,7 @@ class DatabaseService {
       )
     ''');
 
-    // Create order_items table
+    // Create order_items table WITH NEW SPLIT PAYMENT COLUMNS
     await db.execute('''
       CREATE TABLE order_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,6 +97,9 @@ class DatabaseService {
         total_price REAL NOT NULL,
         is_treat INTEGER DEFAULT 0,
         treat_reason TEXT,
+        payment_status TEXT DEFAULT 'unpaid',
+        payment_method TEXT,
+        paid_quantity INTEGER DEFAULT 0,
         FOREIGN KEY (order_id) REFERENCES orders (id)
       )
     ''');
@@ -132,16 +136,30 @@ class DatabaseService {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle database upgrades here
-    // For now, we'll recreate everything (development phase)
-    if (oldVersion < newVersion) {
-      await db.execute('DROP TABLE IF EXISTS tables');
-      await db.execute('DROP TABLE IF EXISTS menu_items');
-      await db.execute('DROP TABLE IF EXISTS orders');
-      await db.execute('DROP TABLE IF EXISTS order_items');
-      await db.execute('DROP TABLE IF EXISTS settings');
-      await db.execute('DROP TABLE IF EXISTS daily_reports');
-      await _onCreate(db, newVersion);
+    print('Upgrading database from version $oldVersion to $newVersion');
+    
+    if (oldVersion < 2) {
+      // Add new columns for split payment
+      try {
+        await db.execute('ALTER TABLE order_items ADD COLUMN payment_status TEXT DEFAULT "unpaid"');
+        print('Added payment_status column');
+      } catch (e) {
+        print('Column payment_status may already exist: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE order_items ADD COLUMN payment_method TEXT');
+        print('Added payment_method column');
+      } catch (e) {
+        print('Column payment_method may already exist: $e');
+      }
+      
+      try {
+        await db.execute('ALTER TABLE order_items ADD COLUMN paid_quantity INTEGER DEFAULT 0');
+        print('Added paid_quantity column');
+      } catch (e) {
+        print('Column paid_quantity may already exist: $e');
+      }
     }
   }
 
